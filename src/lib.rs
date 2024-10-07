@@ -2,13 +2,14 @@
 extern crate diesel;
 
 use diesel::pg::PgConnection;
+use diesel::prelude::*;
 use diesel::r2d2::ConnectionManager;
 use diesel::r2d2::Pool;
-use diesel::prelude::*;
-use dotenv;
+// use dotenv;
+use std::env;
 // use diesel::result::Error;
 // use crate::search::XML_FILES;
-use serde::Serialize;
+// use serde::Serialize;
 use serde_json;
 
 pub mod models;
@@ -22,10 +23,10 @@ use search::query_lns_vec;
 pub type QueryFunc = fn(&str, &PgConnection) -> Result<String, Box<dyn std::error::Error>>;
 
 pub fn get_connection_pool() -> Pool<ConnectionManager<PgConnection>> {
-    dotenv::from_path("/home/simon/.api_keys").expect("api_keys not accessible");
-    // let url = env::var("LATIN_PG_DATABASE_URL").expect("LATIN_PG_DATABASE_URL must be set");
-    let url = dotenv::var("LATIN_PG_DATABASE_URL").expect("LATIN_PG_DATABASE_URL must be set");
-    
+    // dotenv::from_path("/home/simon/.api_keys").expect("api_keys not accessible");
+    let url = env::var("LATIN_PG_DATABASE_URL").expect("LATIN_PG_DATABASE_URL must be set");
+    // let url = dotenv::var("LATIN_PG_DATABASE_URL").expect("LATIN_PG_DATABASE_URL must be set");
+
     let manager = ConnectionManager::<PgConnection>::new(url);
     Pool::builder()
         .max_size(25)
@@ -34,12 +35,12 @@ pub fn get_connection_pool() -> Pool<ConnectionManager<PgConnection>> {
         .expect("Could not build connection pool")
 }
 
-#[derive(Queryable, Debug, PartialEq, Clone, Serialize)]
-struct QueryResult {
-    dict_form: String,
-    part_of_speech: String,
-    meaning: String,
-}
+// #[derive(Queryable, Debug, PartialEq, Clone, Serialize)]
+// struct QueryResult {
+//     dict_form: String,
+//     part_of_speech: String,
+//     meaning: String,
+// }
 
 pub fn query_gcse_latin(
     term: &str,
@@ -125,13 +126,13 @@ pub fn query_wwords(
     term: &str,
     connection: &PgConnection,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    use self::schema::wwords::dsl::wwords;
+    use self::schema::lewis_short_lemmata::dsl::*;
+    use self::schema::wwords::dsl::class as w_class;
     use self::schema::wwords::dsl::dict_form as w_dict_form;
     use self::schema::wwords::dsl::headword as w_headword;
     use self::schema::wwords::dsl::meaning as w_meaning;
     use self::schema::wwords::dsl::part_of_speech as w_part_of_speech;
-    use self::schema::wwords::dsl::class as w_class;
-    use self::schema::lewis_short_lemmata::dsl::*;
+    use self::schema::wwords::dsl::wwords;
 
     let data: Result<Vec<(String, String, Option<String>, String)>, _> = wwords
         .inner_join(lewis_short_lemmata.on(w_headword.eq(headword)))
@@ -163,12 +164,10 @@ pub fn get_lns_key(
         .load(connection);
 
     match data {
-        Ok(results) => {
-            match query_lns_vec(results) {
-                Ok(parsed_entries) => Ok(format!("\"lns\": {}", parsed_entries)),
-                Err(e) => Err(e),
-            }
-        }
+        Ok(results) => match query_lns_vec(results) {
+            Ok(parsed_entries) => Ok(format!("\"lns\": {}", parsed_entries)),
+            Err(e) => Err(e),
+        },
         Err(e) => Err(Box::new(e)),
     }
 }
@@ -251,12 +250,12 @@ pub fn query_wwords_headword(
     term: &str,
     connection: &PgConnection,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    use self::schema::wwords::dsl::wwords;
+    use self::schema::wwords::dsl::class as w_class;
     use self::schema::wwords::dsl::dict_form as w_dict_form;
     use self::schema::wwords::dsl::headword as w_headword;
     use self::schema::wwords::dsl::meaning as w_meaning;
     use self::schema::wwords::dsl::part_of_speech as w_part_of_speech;
-    use self::schema::wwords::dsl::class as w_class;
+    use self::schema::wwords::dsl::wwords;
 
     let data: Result<Vec<(String, String, Option<String>, String)>, _> = wwords
         .filter(w_headword.eq(term))
@@ -284,22 +283,31 @@ pub fn get_lns_key_headword(
         .load(connection);
 
     match data {
-        Ok(results) => {
-            match query_lns_vec(results) {
-                Ok(parsed_entries) => Ok(format!("\"lns\": {}", parsed_entries)),
-                Err(e) => Err(e),
-            }
-        }
+        Ok(results) => match query_lns_vec(results) {
+            Ok(parsed_entries) => Ok(format!("\"lns\": {}", parsed_entries)),
+            Err(e) => Err(e),
+        },
         Err(e) => Err(Box::new(e)),
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::{get_connection_pool, query_asvocab};
 
     #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
+    fn it_connects() {
+        let _ = get_connection_pool();
+    }
+
+    #[test]
+    fn test_asvocab() {
+        let pl = get_connection_pool();
+        let conn = pl.get().expect("Could not get database connection");
+        let res = query_asvocab("servos", &conn);
+        match res {
+            Ok(r) => println!("{}", r),
+            Err(e) => eprintln!("{}", e)
+        }
     }
 }
